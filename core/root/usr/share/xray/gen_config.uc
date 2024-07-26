@@ -17,8 +17,8 @@ function inbounds(proxy, config, extra_inbound) {
     const conn_idle = proxy["conn_idle"];
 
     let i = [
-        socks_inbound("0.0.0.0", proxy["socks_port"] || 1080, "socks_inbound"),
-        http_inbound("0.0.0.0", proxy["http_port"] || 1081, "http_inbound"),
+        http_inbound("0.0.0.0", proxy["http_port"] || 1080, "http_inbound"),
+        socks_inbound("0.0.0.0", proxy["socks_port"] || 1081, "socks_inbound"),
         dokodemo_inbound("0.0.0.0", proxy["tproxy_port_tcp_v4"] || 1082, "tproxy_tcp_inbound_v4", tproxy_sniffing, route_only, ["http", "tls"], "0", "tcp", "tproxy", conn_idle),
         dokodemo_inbound("0.0.0.0", proxy["tproxy_port_tcp_v6"] || 1083, "tproxy_tcp_inbound_v6", tproxy_sniffing, route_only, ["http", "tls"], "0", "tcp", "tproxy", conn_idle),
         dokodemo_inbound("0.0.0.0", proxy["tproxy_port_udp_v4"] || 1084, "tproxy_udp_inbound_v4", tproxy_sniffing, route_only, ["quic"], "0", "udp", "tproxy", conn_idle),
