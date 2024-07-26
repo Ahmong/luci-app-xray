@@ -41,7 +41,7 @@ function stream_tcp_fake_http_response(server) {
 }
 
 function stream_tcp(server) {
-    if (server["transport"] == "tcp") {
+    if (server["transport"] == "tcp" && server["tcp_guise"] != "none") {
         return {
             header: {
                 type: server["tcp_guise"],
@@ -138,6 +138,23 @@ export function port_array(i) {
     return [int(i)];
 };
 
+function removeNullMember(v) {
+    if (v === null) return null;
+
+    if (type(v) === 'object') {
+        for (let key in keys(v)) {
+            if (type(v[key]) === 'object')
+                v[key] = removeNullMember(v[key]);
+
+            if (v[key] === null)
+                delete v[key];
+        }
+        return v;
+    }
+
+    return v;
+};
+
 export function stream_settings(server, protocol, tag) {
     const security = server[protocol + "_tls"];
     let tlsSettings = null;
@@ -154,12 +171,14 @@ export function stream_settings(server, protocol, tag) {
         dialer_proxy = server["dialer_proxy"];
         dialer_proxy_tag = tag + `@dialer_proxy:${dialer_proxy}`;
     }
-    return {
+
+    let ret = {
         stream_settings: {
             network: server["transport"],
             sockopt: {
                 mark: 253,
                 domainStrategy: server["domain_strategy"] || "UseIP",
+                interface: server["sockopt_iface"],
                 dialerProxy: dialer_proxy_tag
             },
             security: security,
@@ -174,4 +193,6 @@ export function stream_settings(server, protocol, tag) {
         },
         dialer_proxy: dialer_proxy
     };
+
+    return removeNullMember(ret);
 };

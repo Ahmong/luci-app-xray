@@ -16,22 +16,26 @@ function fingerprints(o) {
 }
 
 function add_flow_and_stream_security_conf(s, tab_name, depends_field_name, protocol_name, have_tls_flow, server_side) {
-    let o = s.taboption(tab_name, form.ListValue, `${protocol_name}_tls`, _(`[${protocol_name}] Stream Security`));
-    let odep = {};
-    odep[depends_field_name] = protocol_name;
-    if (server_side) {
-        odep["web_server_enable"] = "1";
-    } else {
-        o.depends(depends_field_name, protocol_name);
-        o.value("none", "None");
+    let o;
+
+    if (protocol_name != 'free') {
+        o = s.taboption(tab_name, form.ListValue, `${protocol_name}_tls`, _(`[${protocol_name}] Stream Security`));
+        let odep = {};
+        odep[depends_field_name] = protocol_name;
+        if (server_side) {
+            odep["web_server_enable"] = "1";
+        } else {
+            o.depends(depends_field_name, protocol_name);
+            o.value("none", "None");
+        }
+        o.value("tls", "TLS");
+        if (have_tls_flow) {
+            o.value("reality", "REALITY (Experimental)");
+        }
+        o.depends(odep);
+        o.rmempty = false;
+        o.modalonly = true;
     }
-    o.value("tls", "TLS");
-    if (have_tls_flow) {
-        o.value("reality", "REALITY (Experimental)");
-    }
-    o.depends(odep);
-    o.rmempty = false;
-    o.modalonly = true;
 
     if (have_tls_flow) {
         let flow_tls = s.taboption(tab_name, form.ListValue, `${protocol_name}_flow_tls`, _(`[${protocol_name}][tls] Flow`));
@@ -233,6 +237,11 @@ function http_client(protocol, sub_section, tab_name) {
     add_flow_and_stream_security_conf(sub_section, tab_name, "protocol", "http", false, false);
 }
 
+function free_client(protocol, sub_section, tab_name) {
+    protocol.value("free", "Free");
+    add_flow_and_stream_security_conf(sub_section, tab_name, "protocol", "free", false, false);
+}
+
 function vless_server(protocol, section, tab_name) {
     protocol.value("vless", "VLESS");
     add_flow_and_stream_security_conf(section, tab_name, "web_server_protocol", "vless", true, true);
@@ -256,6 +265,7 @@ return baseclass.extend({
         shadowsocks_client(protocol, sub_section, tab_name);
         http_client(protocol, sub_section, tab_name);
         socks_client(protocol, sub_section, tab_name);
+        free_client(protocol, sub_section, tab_name);
     },
     add_server_protocol: function (protocol, section, tab_name) {
         vless_server(protocol, section, tab_name);

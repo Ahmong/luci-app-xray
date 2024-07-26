@@ -8,6 +8,7 @@
 'require view.xray.protocol as protocol';
 'require view.xray.shared as shared';
 'require view.xray.transport as transport';
+'require view.xray.update_dat as update_dat';
 
 function server_alias(v) {
     return v.alias || v.server + ":" + v.server_port;
@@ -136,7 +137,9 @@ return view.extend({
     render: function (load_result) {
         const config_data = load_result[0];
         const { geoip_existence, geoip_size, geosite_existence, geosite_size, xray_bin_default, xray_running } = check_resource_files(load_result[1]);
-        const status_text = xray_running ? _("[Xray is running]") : _("[Xray is stopped]");
+        const status_text = xray_running
+            ? "[ Xray <em style=\"color: green;\">" + _("is running") + "</em> ] "
+            : "[ Xray <em style=\"color: red;\">" + _("is stopped" + "</em> ] ");
         const hosts = load_result[2].hosts;
 
         let asset_file_status = _('WARNING: at least one of asset files (geoip.dat, geosite.dat) is not found under /usr/share/xray. Xray may not work properly. See <a href="https://github.com/yichya/luci-app-xray">here</a> for help.');
@@ -156,7 +159,10 @@ return view.extend({
 
         s.tab('general', _('General Settings'));
 
-        o = s.taboption('general', form.Flag, 'transparent_proxy_enable', _('Enable Xray Service'), _('Uncheck this to disable the entire Xray service.'));
+        o = s.taboption('general', form.Flag, 'enabled', _('Enable Xray Service'), _('Uncheck this to disable the entire Xray service.'));
+        o.rmempty = false;
+
+        o = s.taboption('general', form.Flag, 'transparent_proxy_enable', _('Enable transparent proxy'), _('Uncheck this to disable the transparent proxy.'));
 
         let tcp_balancer_v4 = s.taboption('general', form.MultiValue, 'tcp_balancer_v4', _('TCP Server (IPv4)'), _("Select multiple outbound servers to enable load balancing. Select none to disable TCP Outbound."));
         tcp_balancer_v4.datatype = "uciname";
@@ -177,6 +183,8 @@ return view.extend({
         general_balancer_strategy.default = "random";
         general_balancer_strategy.rmempty = false;
 
+        o = s.taboption('general', form.Flag, 'tproxy_sniffing', _('Enable tproxy sniffing'), _('Whether to enable traffic sniffing.'));
+
         o = s.taboption('general', form.SectionValue, "xray_servers", form.GridSection, 'servers', _('Xray Servers'), _("Servers are referenced by index (order in the following list). Deleting servers may result in changes of upstream servers actually used by proxy and bridge."));
         ss = o.subsection;
         ss.sortable = false;
@@ -192,17 +200,20 @@ return view.extend({
         o = ss.taboption('general', form.Value, 'server', _('Server Hostname'));
         o.datatype = 'host';
         o.rmempty = false;
+        o.optional = true;
 
         o = ss.taboption('general', form.DynamicList, 'server_port', _('Server Port'));
         o.datatype = 'port';
         o.rmempty = false;
         o.modalonly = true;
+        o.optional = true;
 
         o = ss.taboption('general', form.Value, 'username', _('Email / Username'), _('Optional; username for SOCKS / HTTP outbound, email for other outbound.'));
         o.modalonly = true;
 
         o = ss.taboption('general', form.Value, 'password', _('UserId / Password'), _('Fill user_id for vmess / VLESS, or password for other outbound (also supports <a href="https://github.com/XTLS/Xray-core/issues/158">Xray UUID Mapping</a>)'));
         o.rmempty = false;
+        o.optional = true;
 
         ss.tab('resolving', _("Server Hostname Resolving"));
 
@@ -240,7 +251,7 @@ return view.extend({
 
         o = ss.taboption('transport', form.ListValue, 'transport', _('Transport'));
         transport.init(o, ss, 'transport');
-        o.rmempty = false;
+        o.rmempty = true;
 
         o = ss.taboption('transport', form.ListValue, 'dialer_proxy', _('Dialer Proxy'), _('Similar to <a href="https://xtls.github.io/config/outbound.html#proxysettingsobject">ProxySettings.Tag</a>'));
         o.datatype = "uciname";
@@ -249,6 +260,11 @@ return view.extend({
             o.value(v[".name"], server_alias(v));
         }
         o.modalonly = true;
+
+        let sockopt_iface = ss.taboption('transport', widgets.DeviceSelect, 'sockopt_iface', _("Interface bound in sockopt"), _("Bound interface when stream output throught the outbound."));
+        sockopt_iface.noaliases = true;
+        sockopt_iface.nocreate = true;
+        sockopt_iface.modalonly = true;
 
         ss.tab('custom', _('Custom Options'));
 
@@ -533,24 +549,56 @@ return view.extend({
 
         s.tab('outbound_routing', _('Outbound Routing'));
 
+        o = s.taboption('outbound_routing', form.ListValue, 'default_routing_policy', _('Default Routing Policy'), _('Default policy for routing when all rules below mis matched.'));
+        o.value("forwarded", _("Forwarded"));
+        o.value("bypassed", _("Bypassed"));
+        o.default = "forwarded";
+
         if (geoip_existence) {
-            let geoip_direct_code_list = s.taboption('outbound_routing', form.DynamicList, 'geoip_direct_code_list', _('GeoIP Direct Code List (IPv4)'), _("Hosts in these GeoIP sets will not be forwarded through Xray. Remove all items to forward all non-private hosts."));
+            let geoip_direct_code_list = s.taboption('outbound_routing', form.DynamicList, 'geoip_direct_code_list', _('GeoIP Direct Code List (IPv4)'), _("Hosts in these GeoIP sets will not be forwarded through Xray."));
+            geoip_direct_code_list.depends("default_routing_policy", "forwarded");
             geoip_direct_code_list.datatype = "string";
             geoip_direct_code_list.value("cn", "cn");
             geoip_direct_code_list.value("telegram", "telegram");
 
-            let geoip_direct_code_list_v6 = s.taboption('outbound_routing', form.DynamicList, 'geoip_direct_code_list_v6', _('GeoIP Direct Code List (IPv6)'), _("Hosts in these GeoIP sets will not be forwarded through Xray. Remove all items to forward all non-private hosts."));
+            let geoip_direct_code_list_v6 = s.taboption('outbound_routing', form.DynamicList, 'geoip_direct_code_list_v6', _('GeoIP Direct Code List (IPv6)'), _("Hosts in these GeoIP sets will not be forwarded through Xray."));
+            geoip_direct_code_list_v6.depends("default_routing_policy", "forwarded");
             geoip_direct_code_list_v6.datatype = "string";
             geoip_direct_code_list_v6.value("cn", "cn");
-            geoip_direct_code_list_v6.value("telegram", "telegram");
         } else {
-            let geoip_direct_code_list = s.taboption('outbound_routing', form.DynamicList, 'geoip_direct_code_list', _('GeoIP Direct Code List (IPv4)'), _("Resource file /usr/share/xray/geoip.dat not exist. All network traffic will be forwarded. <br/> Compile your firmware again with data files to use this feature, or<br/><a href=\"https://github.com/v2fly/geoip\">download one</a> (maybe disable transparent proxy first) and upload it to your router."));
+            let geoip_direct_code_list = s.taboption('outbound_routing', form.DynamicList, 'geoip_direct_code_list', _('GeoIP Direct Code List (IPv4)'), _("Resource file /usr/share/xray/geoip.dat not exist. <br/> Compile your firmware again with data files to use this feature, or<br/><a href=\"https://github.com/v2fly/geoip\">download one</a> (maybe disable transparent proxy first) and upload it to your router."));
+            geoip_direct_code_list.depends("default_routing_policy", "forwarded");
             geoip_direct_code_list.readonly = true;
             geoip_direct_code_list.datatype = "string";
 
-            let geoip_direct_code_list_v6 = s.taboption('outbound_routing', form.DynamicList, 'geoip_direct_code_list_v6', _('GeoIP Direct Code List (IPv6)'), _("Resource file /usr/share/xray/geoip.dat not exist. All network traffic will be forwarded. <br/> Compile your firmware again with data files to use this feature, or<br/><a href=\"https://github.com/v2fly/geoip\">download one</a> (maybe disable transparent proxy first) and upload it to your router."));
+            let geoip_direct_code_list_v6 = s.taboption('outbound_routing', form.DynamicList, 'geoip_direct_code_list_v6', _('GeoIP Direct Code List (IPv6)'), _("Resource file /usr/share/xray/geoip.dat not exist. <br/> Compile your firmware again with data files to use this feature, or<br/><a href=\"https://github.com/v2fly/geoip\">download one</a> (maybe disable transparent proxy first) and upload it to your router."));
+            geoip_direct_code_list_v6.depends("default_routing_policy", "forwarded");
             geoip_direct_code_list_v6.readonly = true;
             geoip_direct_code_list_v6.datatype = "string";
+        }
+
+        if (geosite_existence) {
+            let geoip_forwarded_code_list = s.taboption('outbound_routing', form.DynamicList, 'geoip_forwarded_code_list', _('GeoIP Forwarded List (IPv4)'), _("Hosts in these GeoIP sets will be forwarded through Xray."));
+            geoip_forwarded_code_list.depends("default_routing_policy", "bypassed");
+            geoip_forwarded_code_list.datatype = "string";
+            geoip_forwarded_code_list.value("google", "google");
+            geoip_forwarded_code_list.value("telegram", "telegram");
+
+            let geoip_forwarded_code_list_v6 = s.taboption('outbound_routing', form.DynamicList, 'geoip_forwarded_code_list_v6', _('GeoIP Forwarded List (IPv6)'), _("Hosts in these GeoIP sets will be forwarded through Xray."));
+            geoip_forwarded_code_list_v6.depends("default_routing_policy", "bypassed");
+            geoip_forwarded_code_list_v6.datatype = "string";
+            geoip_forwarded_code_list_v6.value("google", "google");
+            geoip_forwarded_code_list_v6.value("telegram", "telegram");
+        } else {
+            let geoip_forwarded_code_list = s.taboption('outbound_routing', form.DynamicList, 'geoip_forwarded_code_list', _('GeoIP Forwarded List (IPv4)'), _("Resource file /usr/share/xray/geoip.dat not exist. <br/> Compile your firmware again with data files to use this feature, or<br/><a href=\"https://github.com/v2fly/geoip\">download one</a> (maybe disable transparent proxy first) and upload it to your router."));
+            geoip_forwarded_code_list.depends("default_routing_policy", "bypassed");
+            geoip_forwarded_code_list.readonly = true;
+            geoip_forwarded_code_list.datatype = "string";
+
+            let geoip_forwarded_code_list_v6 = s.taboption('outbound_routing', form.DynamicList, 'geoip_forwarded_code_list_v6', _('GeoIP Forwarded List (IPv6)'), _("Resource file /usr/share/xray/geoip.dat not exist. <br/> Compile your firmware again with data files to use this feature, or<br/><a href=\"https://github.com/v2fly/geoip\">download one</a> (maybe disable transparent proxy first) and upload it to your router."));
+            geoip_forwarded_code_list_v6.depends("default_routing_policy", "bypassed");
+            geoip_forwarded_code_list_v6.readonly = true;
+            geoip_forwarded_code_list_v6.datatype = "string";
         }
 
         o = s.taboption('outbound_routing', form.DynamicList, "wan_bp_ips", _("Bypassed IP"), _("Requests to these IPs won't be forwarded through Xray."));
@@ -559,7 +607,7 @@ return view.extend({
         o = s.taboption('outbound_routing', form.DynamicList, "wan_fw_ips", _("Forwarded IP"), _("Requests to these IPs will always be handled by Xray (but still might be bypassed by Xray itself, like private addresses).<br/>Useful for some really strange network. If you really need to forward private addresses, try Manual Transparent Proxy below."));
         o.datatype = "ipaddr";
 
-        o = s.taboption('outbound_routing', form.ListValue, 'transparent_default_port_policy', _('Default Ports Policy'));
+        o = s.taboption('outbound_routing', form.ListValue, 'transparent_default_port_policy', _('Default Ports Policy'), _("Default policy when enable transparent proxy."));
         o.value("forwarded", _("Forwarded"));
         o.value("bypassed", _("Bypassed"));
         o.default = "forwarded";
@@ -746,11 +794,13 @@ return view.extend({
         o.datatype = "hostport";
         o.rmempty = false;
 
-        s.tab('custom_options', _('Custom Options'));
-        let custom_configuration_hook = s.taboption('custom_options', form.TextValue, 'custom_configuration_hook', _('Custom Configuration Hook'), _('Read <a href="https://ucode.mein.io/">ucode Documentation</a> for the language used. Code filled here may need to change after upgrading luci-app-xray.'));
+        s.tab('misc_options', _('Custom & Misc'));
+        let custom_configuration_hook = s.taboption('misc_options', form.TextValue, 'custom_configuration_hook', _('Custom Configuration Hook'), _('Read <a href="https://ucode.mein.io/">ucode Documentation</a> for the language used. Code filled here may need to change after upgrading luci-app-xray.'));
         custom_configuration_hook.placeholder = "return function(config) {\n    return config;\n};";
         custom_configuration_hook.monospace = true;
-        custom_configuration_hook.rows = 20;
+        custom_configuration_hook.rows = 15;
+
+        update_dat.update_dat_options(s, 'misc_options');
 
         const servers = uci.sections(config_data, "servers");
         for (let selection of [destination, fake_dns_forward_server_tcp, fake_dns_forward_server_udp, tcp_balancer_v4, tcp_balancer_v6, udp_balancer_v4, udp_balancer_v6]) {

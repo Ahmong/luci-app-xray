@@ -91,10 +91,12 @@ endif
 	$(INSTALL_BIN) ./root/etc/hotplug.d/iface/01-transparent-proxy-ipset $(1)/etc/hotplug.d/iface/01-transparent-proxy-ipset
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/xray
 	$(INSTALL_DATA) ./root/www/luci-static/resources/view/xray/core.js $(1)/www/luci-static/resources/view/xray/core.js
+	$(INSTALL_DATA) ./root/www/luci-static/resources/view/xray/custom.js $(1)/www/luci-static/resources/view/xray/custom.js
 	$(INSTALL_DATA) ./root/www/luci-static/resources/view/xray/preview.js $(1)/www/luci-static/resources/view/xray/preview.js
 	$(INSTALL_DATA) ./root/www/luci-static/resources/view/xray/protocol.js $(1)/www/luci-static/resources/view/xray/protocol.js
 	$(INSTALL_DATA) ./root/www/luci-static/resources/view/xray/shared.js $(1)/www/luci-static/resources/view/xray/shared.js
 	$(INSTALL_DATA) ./root/www/luci-static/resources/view/xray/transport.js $(1)/www/luci-static/resources/view/xray/transport.js
+	$(INSTALL_DATA) ./root/www/luci-static/resources/view/xray/update_dat.js $(1)/www/luci-static/resources/view/xray/update_dat.js
 	$(INSTALL_DIR) $(1)/usr/libexec/rpcd
 	$(INSTALL_BIN) ./root/usr/libexec/rpcd/xray $(1)/usr/libexec/rpcd/xray
 	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d
@@ -138,6 +140,7 @@ endif
 	$(INSTALL_DATA) ./root/usr/share/xray/feature/outbound.mjs $(1)/usr/share/xray/feature/outbound.mjs
 	$(INSTALL_DATA) ./root/usr/share/xray/feature/system.mjs $(1)/usr/share/xray/feature/system.mjs
 	$(INSTALL_DIR) $(1)/usr/share/xray/protocol
+	$(INSTALL_DATA) ./root/usr/share/xray/protocol/free.mjs $(1)/usr/share/xray/protocol/free.mjs
 	$(INSTALL_DATA) ./root/usr/share/xray/protocol/shadowsocks.mjs $(1)/usr/share/xray/protocol/shadowsocks.mjs
 	$(INSTALL_DATA) ./root/usr/share/xray/protocol/trojan.mjs $(1)/usr/share/xray/protocol/trojan.mjs
 	$(INSTALL_DATA) ./root/usr/share/xray/protocol/vless.mjs $(1)/usr/share/xray/protocol/vless.mjs

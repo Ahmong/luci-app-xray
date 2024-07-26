@@ -2,6 +2,11 @@
     "luci-app-xray": {
         "description": "Grant access to xray configurations",
         "read": {
+            "ubus": {
+                "xray": [
+                    "*"
+                ]
+            },
             "uci": [
                 "xray_core"
             ]

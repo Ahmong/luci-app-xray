@@ -112,6 +112,7 @@ flush_dnsmasq() {
 }
 
 create_when_enable() {
+    [ "$(uci_get_by_type general enabled)" == "1" ] || return 0
     [ "$(uci_get_by_type general transparent_proxy_enable)" == "1" ] || return 0
     logger -st xray[$$] -p4 "Setting dnsmasq and firewall for transparent proxy..."
     setup_dnsmasq
@@ -123,15 +124,29 @@ flush_when_disable() {
     logger -st xray[$$] -p4 "Resetting dnsmasq and firewall configurations..."
     flush_dnsmasq
     flush_firewall
+    logger -st xray[$$] -p4 "dnsmasq and firewall have flushed"
 }
 
 start_service() {
     config_load $NAME
+
     mkdir -p /var/run /var/etc/xray
-    local xray_bin=$(uci_get_by_type general xray_bin)
-    command -v ${xray_bin} > /dev/null 2>&1 || return 1
-    gen_config_file
-    start_xray ${xray_bin}
+
+    if [ "$(uci_get_by_type general enabled)" = "1" ] ; then
+        local xray_bin=$(uci_get_by_type general xray_bin)
+
+        logger -st xray[$$] -p4 "Starting xray ..."
+
+        command -v ${xray_bin} > /dev/null 2>&1 || return 1
+
+        gen_config_file
+
+        if [ -s /var/etc/xray/config.json ] ; then
+            start_xray ${xray_bin}
+        fi
+
+    fi
+
     create_when_enable || flush_when_disable
 }
 

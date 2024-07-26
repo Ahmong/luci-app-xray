@@ -184,8 +184,13 @@ function transport_grpc(transport, sub_section, tab_name) {
     grpc_initial_windows_size.datatype = 'integer';
 }
 
+function transport_none(transport, sub_section, tab_name) {
+    transport.value("", "None");
+}
+
 return baseclass.extend({
     init: function (transport, sub_section, tab_name) {
+        transport_none(transport, sub_section, tab_name);
         transport_tcp(transport, sub_section, tab_name);
         transport_mkcp(transport, sub_section, tab_name);
         transport_ws(transport, sub_section, tab_name);

@@ -1,13 +1,82 @@
 #!/bin/sh
 
+. /usr/share/libubox/jshn.sh
+
+
+do_update() {
+    local targetdir="/usr/share/xray"
+    local file_name="$1"
+    local down_url="$2"
+
+    rm -f "/tmp/$file_name.sha256sum"
+    rm -f "/tmp/$file_name"
+
+    wget -q -O "/tmp/$file_name.sha256sum" "$down_url.sha256sum" > /dev/null 2>&1
+    wget -q -O "/tmp/$file_name" "$down_url" > /dev/null 2>&1
+    cd /tmp && sha256sum -c "$file_name.sha256sum" > /tmp/xray_update_msg.log 2>&1
+
+    if [ $? -eq 0 ] ; then
+        # printf '{ "code": 1,\n "debug": "%s" }\n' "$file_name: $down_url"
+        # return
+
+        if [ -s /tmp/$file_name ] ; then
+            [ -s "$targetdir/$file_name" ] && mv -f "$targetdir/$file_name" "$targetdir/$file_name.save" > /dev/null 2>&1
+            mv -f "/tmp/$file_name" "$targetdir/$file_name"
+            mv -f "/tmp/$file_name.sha256sum" "$targetdir/$file_name.sha256sum"
+            echo '{ "code": 1 }'
+        else
+            rm -f /tmp/$file_name /tmp/$file_name.sha256sum
+            echo '{ "code": 0 : "msg": "empty file" }'
+        fi
+    else
+        rm -f /tmp/$file_name /tmp/$file_name.sha256sum
+        echo "{ \"code\": 0, \"msg\": \"$(cat /tmp/xray_update_msg.log)\" }"
+    fi
+}
+
+update_geosite() {
+    do_update "geosite.dat" "$1"
+}
+
+update_geoip() {
+    do_update "geoip.dat" "$1"
+}
+
 main() {
     case "$1" in
         list)
-            echo '{"statsquery":{},"statssys":{},"restartlogger":{}}'
+            echo '{"statsquery":{},"statssys":{},"restartlogger":{},"updatedatafile":{"name": "String", "url": "String"}}'
             ;;
         call)
-            shift
-            xray api $@
+            case "$2" in
+                statsquery)
+                    shift
+                    xray api $@
+                ;;
+                statssys)
+                    shift
+                    xray api $@
+                ;;
+                restartlogger)
+                    shift
+                    xray api $@
+                ;;
+                updatedatafile)
+                    read input;
+
+                    json_set_namespace "xray_updatedatafile" old_ns
+
+                    json_load "$input"
+                    json_get_var file_name "name"
+                    json_get_var url "url"
+
+                    json_cleanup
+
+                    json_set_namespace "$old_ns"
+
+                    update_"$file_name" "$url"
+                ;;
+            esac
     esac
 }
 

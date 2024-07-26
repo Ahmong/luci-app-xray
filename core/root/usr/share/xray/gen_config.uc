@@ -124,24 +124,57 @@ function rules(proxy, bridge, manual_tproxy, extra_inbound, fakedns) {
         ...function () {
             let direct_rules = [];
             if (geoip_existence) {
-                if (proxy["geoip_direct_code_list"] != null) {
-                    const geoip_direct_code_list = map(proxy["geoip_direct_code_list"] || [], v => index(v, ":") > 0 ? v : `geoip:${v}`);
-                    if (length(geoip_direct_code_list) > 0) {
+                if (proxy['default_routing_policy'] == 'forwarded') {
+                    if (proxy["geoip_direct_code_list"] != null || proxy["geoip_direct_code_list_v6"] != null) {
+                        const geoip_direct_code_list = map(proxy["geoip_direct_code_list"] || [], v => index(v, ":") > 0 ? v : `geoip:${v}`);
+                        if (length(geoip_direct_code_list) > 0) {
+                            push(direct_rules, {
+                                type: "field",
+                                inboundTag: [...built_in_tcp_inbounds, ...built_in_udp_inbounds],
+                                outboundTag: "direct",
+                                ip: geoip_direct_code_list
+                            });
+                        }
+                        const geoip_direct_code_list_v6 = map(proxy["geoip_direct_code_list_v6"] || [], v => index(v, ":") > 0 ? v : `geoip:${v}`);
+                        if (length(geoip_direct_code_list_v6) > 0) {
+                            push(direct_rules, {
+                                type: "field",
+                                inboundTag: [...tproxy_tcp_inbound_v6_tags, ...tproxy_udp_inbound_v6_tags],
+                                outboundTag: "direct",
+                                ip: geoip_direct_code_list_v6
+                            });
+                        }
+                    }
+                }
+                else {
+                    if (proxy["geoip_forwarded_code_list"] != null || proxy["geoip_forwarded_code_list_v6"] != null) {
+                        const geoip_forwarded_code_list = map(proxy["geoip_forwarded_code_list"] || [], v => index(v, ":") > 0 ? v : `geoip:${v}`);
+                        if (length(geoip_forwarded_code_list) > 0) {
+                            push(direct_rules, {
+                                type: "field",
+                                inboundTag: [...built_in_tcp_inbounds, ...built_in_udp_inbounds],
+                                balancerTag: "tcp_outbound_v4",
+                                ip: geoip_forwarded_code_list
+                            });
+                        }
+                        const geoip_forwarded_code_list_v6 = map(proxy["geoip_forwarded_code_list_v6"] || [], v => index(v, ":") > 0 ? v : `geoip:${v}`);
+                        if (length(geoip_forwarded_code_list_v6) > 0) {
+                            push(direct_rules, {
+                                type: "field",
+                                inboundTag: [...tproxy_tcp_inbound_v6_tags, ...tproxy_udp_inbound_v6_tags],
+                                balancerTag: "tcp_outbound_v6",
+                                ip: geoip_forwarded_code_list_v6
+                            });
+                        }
+                    }
+                    const wan_fw_ips = proxy["wan_fw_ips"] || [];
+                    if (length(wan_fw_ips) > 0) {
                         push(direct_rules, {
                             type: "field",
                             inboundTag: [...built_in_tcp_inbounds, ...built_in_udp_inbounds],
-                            outboundTag: "direct",
-                            ip: geoip_direct_code_list
-                        });
-                    }
-                    const geoip_direct_code_list_v6 = map(proxy["geoip_direct_code_list_v6"] || [], v => index(v, ":") > 0 ? v : `geoip:${v}`);
-                    if (length(geoip_direct_code_list_v6) > 0) {
-                        push(direct_rules, {
-                            type: "field",
-                            inboundTag: [...tproxy_tcp_inbound_v6_tags, ...tproxy_udp_inbound_v6_tags],
-                            outboundTag: "direct",
-                            ip: geoip_direct_code_list_v6
-                        });
+                            balancerTag: "tcp_outbound_v4",
+                            ip: wan_fw_ips
+                        })
                     }
                 }
                 push(direct_rules, {
@@ -156,34 +189,34 @@ function rules(proxy, bridge, manual_tproxy, extra_inbound, fakedns) {
         {
             type: "field",
             inboundTag: tproxy_tcp_inbound_v6_tags,
-            balancerTag: "tcp_outbound_v6"
+            ...(proxy['default_routing_policy'] == 'forwarded' ? { balancerTag: "tcp_outbound_v6" } : { outboundTag: "direct" } )
         },
         {
             type: "field",
             inboundTag: tproxy_udp_inbound_v6_tags,
-            balancerTag: "udp_outbound_v6"
+            ...(proxy['default_routing_policy'] == 'forwarded' ? { balancerTag: "tcp_outbound_v6" } : { outboundTag: "direct" } )
         },
         {
             type: "field",
             inboundTag: built_in_tcp_inbounds,
-            balancerTag: "tcp_outbound_v4"
+            ...(proxy['default_routing_policy'] == 'forwarded' ? { balancerTag: "tcp_outbound_v4" } : { outboundTag: "direct" } )
         },
         {
             type: "field",
             inboundTag: built_in_udp_inbounds,
-            balancerTag: "udp_outbound_v4"
+            ...(proxy['default_routing_policy'] == 'forwarded' ? { balancerTag: "tcp_outbound_v4" } : { outboundTag: "direct" } )
         },
     ];
     if (proxy["tproxy_sniffing"] == "1") {
         if (length(secure_domain_rules(proxy)) > 0) {
             splice(result, 0, 0, {
                 type: "field",
-                inboundTag: [...tproxy_tcp_inbound_v4_tags, ...extra_inbound_global_tcp_tags],
+                inboundTag: [...built_in_tcp_inbounds, ...extra_inbound_global_tcp_tags],
                 balancerTag: "tcp_outbound_v4",
                 domain: secure_domain_rules(proxy),
             }, {
                 type: "field",
-                inboundTag: [...tproxy_udp_inbound_v4_tags, ...extra_inbound_global_udp_tags],
+                inboundTag: [...built_in_udp_inbounds, ...extra_inbound_global_udp_tags],
                 balancerTag: "udp_outbound_v4",
                 domain: secure_domain_rules(proxy),
             }, {
@@ -286,4 +319,4 @@ function gen_config() {
     });
 }
 
-print(gen_config());
+printf("%.2J\n", gen_config());
