@@ -43,6 +43,26 @@ log_procd_set_param() {
 }
 
 start_xray() {
+    echo "initing..." > /usr/share/xray/xray_init_msg.log
+
+    logger -st xray[$$] -p4 "Checking geoip.dat and geosite.dat ..."
+
+    [ -f /usr/share/xray/geoip.dat ] && [ -f /usr/share/xray/geoip.dat.sha256sum ] && {
+        cd /usr/share/xray && sha256sum -c geoip.dat.sha256sum >> /usr/share/xray/xray_init_msg.log 2>&1
+        [ $? -eq 0 ] || {
+            logger -st xray[$$] -p4 "geoip.dat crashed (sha256sum ret $?)"
+            return
+        }
+    }
+
+    [ -f /usr/share/xray/geosite.dat ] && [ -f /usr/share/xray/geosite.dat.sha256sum ] && {
+        cd /usr/share/xray && sha256sum -c geosite.dat.sha256sum >> /usr/share/xray/xray_init_msg.log 2>&1
+        [ $? -eq 0 ] || {
+            logger -st xray[$$] -p4 "geosite.dat crashed (sha256sum ret $?)"
+            return
+        }
+    }
+
     logger -st xray[$$] -p4 "Starting Xray from $1"
     procd_open_instance
     procd_set_param respawn 1 1 0

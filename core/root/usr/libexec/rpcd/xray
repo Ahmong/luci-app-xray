@@ -4,33 +4,58 @@
 
 
 do_update() {
-    local targetdir="/usr/share/xray"
+    local dir="/usr/share/xray"
+    local tmpdir="/tmp"
     local file_name="$1"
     local down_url="$2"
 
-    rm -f "/tmp/$file_name.sha256sum"
-    rm -f "/tmp/$file_name"
+    echo "update $file_name begin..." > $dir/xray_update_msg.log
 
-    wget -q -O "/tmp/$file_name.sha256sum" "$down_url.sha256sum" > /dev/null 2>&1
-    wget -q -O "/tmp/$file_name" "$down_url" > /dev/null 2>&1
-    cd /tmp && sha256sum -c "$file_name.sha256sum" > /tmp/xray_update_msg.log 2>&1
+    rm -f "$tmpdir/$file_name.sha256sum"
+    rm -f "$tmpdir/$file_name"
+    mkdir -p $dir
 
+    echo "downloading $file_name, url: $down_url " >> $dir/xray_update_msg.log
+
+    wget -q -O "$tmpdir/$file_name.sha256sum" "$down_url.sha256sum" > /dev/null 2>&1
+    wget -q -O "$tmpdir/$file_name" "$down_url" > /dev/null 2>&1
+    echo "$file_name downloaded." >> $dir/xray_update_msg.log
+
+    cd $tmpdir && sha256sum -c "$file_name.sha256sum" >> $dir/xray_update_msg.log 2>&1
     if [ $? -eq 0 ] ; then
-        # printf '{ "code": 1,\n "debug": "%s" }\n' "$file_name: $down_url"
-        # return
 
-        if [ -s /tmp/$file_name ] ; then
-            [ -s "$targetdir/$file_name" ] && mv -f "$targetdir/$file_name" "$targetdir/$file_name.save" > /dev/null 2>&1
-            mv -f "/tmp/$file_name" "$targetdir/$file_name"
-            mv -f "/tmp/$file_name.sha256sum" "$targetdir/$file_name.sha256sum"
-            echo '{ "code": 1 }'
+        if [ -s $tmpdir/$file_name ] ; then
+
+            echo "stop xray_core..." >> $dir/xray_update_msg.log
+            /etc/init.d/xray_core stop
+
+            [ -s "$dir/$file_name" ] && [ -s "$dir/$file_name.sha256sum" ] && {
+                cd $dir && sha256sum -c $file_name.sha256sum >> $dir/xray_update_msg.log 2>&1
+                [ $? -eq 0 ] && {
+                    echo "move $dir/$file_name to $dir/$file_name.save " >> $dir/xray_update_msg.log
+                    mv -f "$dir/$file_name" "$dir/$file_name.save" > /dev/null 2>&1
+                }
+            }
+
+            echo "move $tmpdir/$file_name to $dir/$file_name ">> $dir/xray_update_msg.log
+            mv -f "$tmpdir/$file_name" "$dir/$file_name"
+            mv -f "$tmpdir/$file_name.sha256sum" "$dir/$file_name.sha256sum"
+            chmod 444 "$dir/$file_name" "$dir/$file_name.sha256sum"
+
+            echo "start xray_core..." >> $dir/xray_update_msg.log
+            /etc/init.d/xray_core start
+
+            echo "update $file_name finished." >> $dir/xray_update_msg.log
+            echo '{ "code": 0 }'
         else
-            rm -f /tmp/$file_name /tmp/$file_name.sha256sum
-            echo '{ "code": 0 : "msg": "empty file" }'
+            echo "download file is empty, update failed." >> $dir/xray_update_msg.log
+
+            echo '{ "code": 1, "msg": "empty file" }'
         fi
     else
-        rm -f /tmp/$file_name /tmp/$file_name.sha256sum
-        echo "{ \"code\": 0, \"msg\": \"$(cat /tmp/xray_update_msg.log)\" }"
+        echo "download file sha256sum error, update failed." >> $dir/xray_update_msg.log
+
+        echo "{ \"code\": 1, \"msg\": \"$(cat /tmp/xray_update_msg.log)\" }"
     fi
 }
 

@@ -16,22 +16,16 @@
 'require baseclass';
 
 'require view/xray/custom as custom'
-// "require v2ray";
 "require view";
-
-// "require tools/widgets as widgets";
-
-// "require view/v2ray/include/custom as custom";
-// "require view/v2ray/tools/converters as converters";
 
 const urls = {
   geosite: {
     github: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat",
-    jsdelivr: "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat",
+    jsdelivr: "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat",
   },
   geoip: {
     github: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat",
-    jsdelivr: "https://ftp.arin.net/pub/stats/apnic/delegated-apnic-latest",
+    jsdelivr: "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat",
   },
 };
 
@@ -41,6 +35,7 @@ const callUpdateDataFile =
     method: "updatedatafile",
     params: [ "name", "url" ],
     expect: { "": { code: 1 } },
+    reject: true,
     /*
     filter: function (data) {
       if (data.code === 0) {
@@ -66,13 +61,14 @@ return view.extend({
       window.location.reload();
     };
 
-    const geositeMirror = uci.get("xray_core", section_id, listtype) || "github";
+    const geositeMirror = uci.get("xray_core", section_id, listtype + '_url') || "github";
+
     const url = urls[listtype][geositeMirror];
 
     return callUpdateDataFile(listtype, url)
       .then(function (res/*: LuCI.response*/) {
         console.log('res', res);
-        if (res["code"] == 1) {
+        if (res["code"] == 0) {
           ui.showModal(_("List Update"), [
             E("p", _(listtype + " updated.")),
             E(
@@ -90,7 +86,7 @@ return view.extend({
           ]);
         }
         else {
-          ui.addNotification(null, E("p", 'Update failed' + (res['msg'] || '')));
+          ui.addNotification(null, E("p", 'Update failed! ' + (res['msg'] || '')));
         }
       })
       // .catch(res => L.raise("Error", res.statusText))
@@ -113,7 +109,7 @@ return view.extend({
     o.btnstyle = "apply";
     o.onupdate = L.bind(this.handleListUpdate, this);
 
-    o = s.taboption(tab, form.ListValue, "geoip_rul", _("geoip update mirror"));
+    o = s.taboption(tab, form.ListValue, "geoip_url", _("geoip update mirror"));
     o.value("github", "GitHub");
     o.value("jsdelivr", "JsDelivr");
     o.default = "github";

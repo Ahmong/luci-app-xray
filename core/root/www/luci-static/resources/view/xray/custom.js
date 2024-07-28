@@ -111,8 +111,6 @@ const CUSTOMListStatusValue = form.AbstractValue.extend({
           }),
       }))
       .catch(() => {
-        console.log('stat failed');
-
         return defStat;
       })
   },
